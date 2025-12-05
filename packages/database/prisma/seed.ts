@@ -1,5 +1,6 @@
 import { PrismaClient, Role, Plan } from '.prisma/client';
 import * as bcrypt from 'bcryptjs';
+import { seedAchievements } from './seeds/achievements';
 
 const prisma = new PrismaClient();
 
@@ -190,6 +191,10 @@ async function main() {
     });
   }
   console.log('✅ System configuration created');
+
+  // Seed Achievements (Phase 2)
+  console.log('\n');
+  await seedAchievements(prisma);
 
   console.log('\n✨ Database seeded successfully!\n');
   console.log('═══════════════════════════════════════════════════════');

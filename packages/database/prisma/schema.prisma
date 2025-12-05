@@ -80,6 +80,10 @@ model User {
   sessions             Session[]
   refreshTokens        RefreshToken[]
   userPreferences      UserPreference?
+  interviews           Interview[]
+  activities           Activity[]
+  dailyActivities      DailyActivity[]
+  userAchievements     UserAchievement[]
 
   @@index([email])
   @@index([username])
@@ -213,4 +217,308 @@ model AuditLog {
   @@index([action])
   @@index([createdAt])
   @@map("audit_logs")
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// INTERVIEWS & AI EVALUATION
+// ═══════════════════════════════════════════════════════════════════════
+
+enum InterviewType {
+  TECHNICAL
+  BEHAVIORAL
+  SYSTEM_DESIGN
+  MOCK_FULL
+  CUSTOM
+}
+
+enum InterviewStatus {
+  DRAFT
+  SCHEDULED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+enum QuestionDifficulty {
+  EASY
+  MEDIUM
+  HARD
+}
+
+model Interview {
+  id                String          @id @default(cuid())
+  userId            String
+  type              InterviewType
+  status            InterviewStatus @default(DRAFT)
+  
+  // Configuration
+  role              String          @db.VarChar(255)
+  company           String?         @db.VarChar(255)
+  experienceLevel   String          @default("MID")
+  techStack         String[]
+  focusAreas        String[]
+  duration          Int             @default(30)
+  questionsCount    Int             @default(5)
+  
+  // AI Settings
+  useAiGeneration   Boolean         @default(true)
+  voiceEnabled      Boolean         @default(true)
+  ttsVoice          String          @default("alloy")
+  
+  // Session Data
+  startedAt         DateTime?
+  completedAt       DateTime?
+  totalDuration     Int?
+  
+  // Scoring
+  overallScore      Float?
+  correctnessScore  Float?
+  completenessScore Float?
+  clarityScore      Float?
+  problemSolvingScore Float?
+  
+  // Metadata
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+  
+  // Relations
+  user              User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  questions         InterviewQuestion[]
+  feedback          InterviewFeedback?
+  recordings        InterviewRecording[]
+
+  @@index([userId])
+  @@index([status])
+  @@index([type])
+  @@index([createdAt])
+  @@map("interviews")
+}
+
+model InterviewQuestion {
+  id                String              @id @default(cuid())
+  interviewId       String
+  order             Int
+  
+  // Question Content
+  question          String              @db.Text
+  category          String              @db.VarChar(100)
+  difficulty        QuestionDifficulty
+  expectedAnswer    String?             @db.Text
+  evaluationCriteria Json?
+  
+  // AI Generation
+  generatedByAi     Boolean             @default(true)
+  promptUsed        String?             @db.Text
+  
+  // Audio
+  audioUrl          String?             @db.Text
+  audioDuration     Int?
+  ttsGenerated      Boolean             @default(false)
+  
+  // User Response
+  userAnswer        String?             @db.Text
+  userAudioUrl      String?             @db.Text
+  transcription     String?             @db.Text
+  transcriptionConfidence Float?
+  
+  // Evaluation
+  score             Float?
+  correctness       Float?
+  completeness      Float?
+  clarity           Float?
+  strengths         String[]
+  improvements      String[]
+  aiEvaluation      String?             @db.Text
+  modelAnswer       String?             @db.Text
+  
+  // Timing
+  answeredAt        DateTime?
+  evaluatedAt       DateTime?
+  timeSpent         Int?
+  
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+  
+  // Relations
+  interview         Interview           @relation(fields: [interviewId], references: [id], onDelete: Cascade)
+
+  @@index([interviewId])
+  @@index([category])
+  @@index([difficulty])
+  @@map("interview_questions")
+}
+
+model InterviewFeedback {
+  id                String    @id @default(cuid())
+  interviewId       String    @unique
+  
+  // Overall Feedback
+  summary           String    @db.Text
+  strengths         String[]
+  areasToImprove    String[]
+  recommendations   String[]
+  nextSteps         String[]
+  
+  // Detailed Analysis
+  technicalDepth    Float?
+  communicationSkills Float?
+  problemApproach   Float?
+  codeQuality       Float?
+  
+  // AI Generated
+  generatedByAi     Boolean   @default(true)
+  aiPrompt          String?   @db.Text
+  
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  
+  // Relations
+  interview         Interview @relation(fields: [interviewId], references: [id], onDelete: Cascade)
+
+  @@index([interviewId])
+  @@map("interview_feedback")
+}
+
+model InterviewRecording {
+  id              String    @id @default(cuid())
+  interviewId     String
+  userId          String
+  
+  // File Data
+  filename        String    @db.VarChar(255)
+  originalName    String    @db.VarChar(255)
+  fileUrl         String    @db.Text
+  fileSize        Int
+  mimeType        String    @db.VarChar(100)
+  duration        Int?
+  
+  // Processing
+  transcribed     Boolean   @default(false)
+  transcription   String?   @db.Text
+  transcribedAt   DateTime?
+  
+  createdAt       DateTime  @default(now())
+  
+  // Relations
+  interview       Interview @relation(fields: [interviewId], references: [id], onDelete: Cascade)
+
+  @@index([interviewId])
+  @@index([userId])
+  @@map("interview_recordings")
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// ACTIVITY TRACKING & GAMIFICATION
+// ═══════════════════════════════════════════════════════════════════════
+
+enum ActivityType {
+  INTERVIEW_COMPLETED
+  PROBLEM_SOLVED
+  COURSE_COMPLETED
+  LESSON_COMPLETED
+  ACHIEVEMENT_UNLOCKED
+  STREAK_MILESTONE
+}
+
+model Activity {
+  id          String       @id @default(cuid())
+  userId      String
+  type        ActivityType
+  
+  // Activity Data
+  title       String       @db.VarChar(255)
+  description String?      @db.Text
+  points      Int          @default(0)
+  metadata    Json?
+  
+  // Visibility
+  isPublic    Boolean      @default(true)
+  
+  createdAt   DateTime     @default(now())
+  
+  // Relations
+  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([type])
+  @@index([createdAt])
+  @@map("activities")
+}
+
+model DailyActivity {
+  id          String   @id @default(cuid())
+  userId      String
+  date        DateTime @db.Date
+  
+  // Counts
+  interviews  Int      @default(0)
+  problems    Int      @default(0)
+  courses     Int      @default(0)
+  lessons     Int      @default(0)
+  
+  // Metrics
+  totalPoints Int      @default(0)
+  totalTime   Int      @default(0)
+  
+  // Intensity (0-4 for heatmap)
+  intensity   Int      @default(0)
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  // Relations
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, date])
+  @@index([userId])
+  @@index([date])
+  @@map("daily_activities")
+}
+
+model Achievement {
+  id          String   @id @default(cuid())
+  key         String   @unique @db.VarChar(100)
+  
+  // Display
+  name        String   @db.VarChar(255)
+  description String   @db.Text
+  icon        String   @db.VarChar(100)
+  category    String   @db.VarChar(100)
+  
+  // Requirements
+  requirement Json
+  points      Int      @default(0)
+  
+  // Rarity
+  tier        String   @default("BRONZE")
+  isHidden    Boolean  @default(false)
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([category])
+  @@index([tier])
+  @@map("achievements")
+}
+
+model UserAchievement {
+  id            String   @id @default(cuid())
+  userId        String
+  achievementId String
+  
+  // Progress
+  progress      Float    @default(0)
+  isUnlocked    Boolean  @default(false)
+  unlockedAt    DateTime?
+  
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  
+  // Relations
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, achievementId])
+  @@index([userId])
+  @@index([achievementId])
+  @@map("user_achievements")
 }
